@@ -11,5 +11,5 @@ To set up the project, code files expect
 * an empty /output subdirectory, in which results and output files will be stored during computation
   
 In case of any questions please reach out to the authors via email
-Kratz, Fabian Fabian.Kratz@soziologie.uni-muenchen.de
-Klee, Matthias Matthias.Klee@med.uni-heidelberg.de
+* Kratz, Fabian: Fabian.Kratz@soziologie.uni-muenchen.de
+* Klee, Matthias: Matthias.Klee@med.uni-heidelberg.de
