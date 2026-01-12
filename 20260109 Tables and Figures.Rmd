@@ -1,0 +1,366 @@
+---
+title: "20250219 Tables and Figures"
+output:
+  html_document: default
+  word_document: default
+date: "2025-02-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(include = FALSE)
+knitr::opts_chunk$set(results = FALSE)
+```
+
+## Setup
+
+```{r load packages}
+library(table1)
+library(Hmisc)
+library(tidyverse)
+library(gdata)
+library(xtable)
+```
+
+```{r load data}
+today <- Sys.Date()
+```
+
+```{r load data}
+load(paste0("./infile/", today, "_cognition_data_final_out.RData"))
+```
+
+```{r load results}
+load(file = paste0("./output/", today, "_all.RData"))
+load(file = paste0("./output/", today, "_male.RData"))
+load(file = paste0("./output/", today, "_female.RData"))
+load(file = paste0("./output/", today, "_hispanic.RData"))
+load(file = paste0("./output/", today, "_not_hispanic.RData"))
+load(file = paste0("./output/", today, "_white.RData"))
+load(file = paste0("./output/", today, "_black.RData"))
+load(file = paste0("./output/", today, "_other.RData"))
+load(file = paste0("./output/", today, "_all_edu_sens.RData"))
+load(file = paste0("./output/", today, "_all_nnet.RData"))
+load(file = paste0("./output/", today, "_all_param.RData"))
+```
+
+## Function definitions
+
+```{r functions, eval=TRUE}
+relevel_table1 <- function(data){
+  data_releveled <- data %>% 
+    mutate(education = ifelse(education == "college", "College or Higher", "Below College"),
+           education_p = ifelse(education_p == "one_parent_above_8_yedu",
+                                "One or More Parents With >8 Years of Education",
+                                "No Parent With >8 Years of Education"),
+           RAGENDER = ifelse(RAGENDER == '1.Male', "Male", "Female"),
+           RARACEM = as_factor(case_when(
+             RARACEM == "1.White/Caucasian" ~ "White",
+             RARACEM == "2.Black/African American" ~ "Black",
+             RARACEM == "3.Other" ~ "Other")),
+           RAHISPAN = as_factor(case_when(
+             RAHISPAN == "0.Not Hispanic" ~ "Non-Hispanic",
+             RAHISPAN == "1.Hispanic" ~ "Hispanic")),
+           FAMFIN = as_factor(case_when(
+             FAMFIN == "WELL" ~ "Well",
+             FAMFIN == "AVERAGE" ~ "Average",
+             FAMFIN %in% c("POOR", "VOLATILE") ~ "Poor/Volatile")),
+           FJOB = as_factor(case_when(
+             FJOB == "MANAGERIAL" ~ "Managerial",
+             FJOB == "SALES" ~ "Sales",
+             FJOB == "CLERICAL" ~ "Clerical",
+             FJOB == "SERVICE" ~ "Service",
+             FJOB == "MANUAL" ~ "Manual",
+             FJOB == "ARMED" ~ "Armed")),
+           wave = as_factor(wave),
+           HACOHORT = as_factor(HACOHORT))
+  
+  # tidy labels
+  label(data_releveled$RAGEY_B) <- "Age"
+  label(data_releveled$RAGENDER) <- "Gender"
+  label(data_releveled$education) <- "Education"
+  label(data_releveled$education_p) <- "Parental Education"
+  label(data_releveled$RCOG27) <- "Cognitive Function"
+  label(data_releveled$RARACEM) <- "Race"
+  label(data_releveled$RAHISPAN) <- "Ethnicity"
+  label(data_releveled$RTHLTHCH) <- "Self-Rated Health During Childhood"
+  label(data_releveled$FJOB) <- "Fathers Occupation at 16"
+  label(data_releveled$FAMFIN) <- "Financial Situation of the Family During Childhood"
+  label(data_releveled$HACOHORT) <- "Cohort"
+  label(data_releveled$wave) <- "Wave"
+  
+  return(data_releveled)
+}
+
+render_continuous <- function(x, cutoff = .05, ...) {
+  strs <- c(
+    "",
+    "M (95% CI)" = paste0(
+      sprintf("%1.1f", mean(x, na.rm = TRUE)),
+      " (",
+      sprintf("%1.1f", mean_cl_normal(x, na.rm = TRUE)[2]),
+      "; ",
+      sprintf("%1.1f", mean_cl_normal(x, na.rm = TRUE)[3]),
+      ")")
+    )
+  
+  return(strs)
+}
+
+pvalue <- function(x, ...) {
+  # Construct vectors of data y, and groups (strata) g
+  y <- unlist(x)
+  g <- factor(rep(1:length(x), times=sapply(x, length)))
+  if (is.numeric(y)) {
+    # For numeric variables, perform a standard 2-sample t-test
+    p <- t.test(y ~ g)$p.value
+  } else {
+    # For categorical variables, perform a chi-squared test of independence
+    p <- chisq.test(table(y, g))$p.value
+  }
+  # Format the p-value, using an HTML entity for the less-than sign.
+  # The initial empty string places the output on the line below the variable label.
+  c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+rd <- function(x) {format(round(x, 3), nsmall = 3)}
+
+irl <- function(x,y,z) {
+  paste(rd(x), paste("(", paste(rd(y), rd(z), sep=", "), ")", sep=""))
+}
+
+```
+
+
+## Filtering
+
+```{r filter data, eval=TRUE, results=TRUE}
+cognition_data_final_out_filtered <- cognition_data_final_out %>% 
+  # restrict age
+  filter(RAGEY_B >= 50 & RAGEY_B <= 60) %>% 
+  # id indicator
+  group_by(HHIDPN) %>% 
+  mutate(ind = 1:n()) %>% 
+  ungroup() %>% 
+  filter(ind == 1)
+```
+
+## Table A1 (Imputed, Analytic Data Set)
+
+```{r table a1, eval=TRUE, results = TRUE, include = TRUE}
+table_1_data <- relevel_table1(cognition_data_final_out_filtered)
+table1(~ RAGEY_B + education  + RAGENDER +
+         RARACEM + RAHISPAN + 
+         RCOG27 +
+         FJOB + FAMFIN + 
+         RTHLTHCH +
+         wave |
+         education_p, data = table_1_data, overall = F,
+       render.continuous = render_continuous)
+```
+
+## Table A2 Decomposition estimates
+
+This table is adapted from: https://github.com/ang-yu/causal_decomposition_case_study/blob/main/Analysis
+
+```{r table a2, eval=TRUE, results='asis', message=F, echo=FALSE, warning=FALSE, include = TRUE}
+tableA2 <- cbind(
+  c("Total",
+    "Baseline",
+    "Prevalence",
+    "Effect",
+    "Selection",
+    "Jackson reduction"),
+  # all
+  c(irl(result_all$results$point, result_all$results$CI_lower, result_all$results$CI_upper),
+    irl(result_all$results_specific$point[13],
+        result_all$results_specific$CI_lower[13],
+        result_all$results_specific$CI_upper[13])),
+  # female
+  c(irl(result_female$results$point, result_female$results$CI_lower, result_female$results$CI_upper),
+    irl(result_female$results_specific$point[13],
+        result_female$results_specific$CI_lower[13],
+        result_female$results_specific$CI_upper[13])),
+  # male
+  c(irl(result_male$results$point, result_male$results$CI_lower, result_male$results$CI_upper),
+    irl(result_male$results_specific$point[13],
+        result_male$results_specific$CI_lower[13],
+        result_male$results_specific$CI_upper[13])),
+  # white
+  c(irl(result_white$results$point, result_white$results$CI_lower, result_white$results$CI_upper),
+    irl(result_white$results_specific$point[13],
+        result_white$results_specific$CI_lower[13],
+        result_white$results_specific$CI_upper[13])),
+  # black
+  c(irl(result_black$results$point, result_black$results$CI_lower, result_black$results$CI_upper),
+    irl(result_black$results_specific$point[13],
+        result_black$results_specific$CI_lower[13],
+        result_black$results_specific$CI_upper[13])),
+  # other
+  c(irl(result_other$results$point, result_other$results$CI_lower, result_other$results$CI_upper),
+    irl(result_other$results_specific$point[13],
+        result_other$results_specific$CI_lower[13],
+        result_other$results_specific$CI_upper[13])),
+  # hispanic
+  c(irl(result_hispanic$results$point, result_hispanic$results$CI_lower, result_hispanic$results$CI_upper),
+    irl(result_hispanic$results_specific$point[13],
+        result_hispanic$results_specific$CI_lower[13],
+        result_hispanic$results_specific$CI_upper[13])),
+  # not hispanic
+  c(irl(result_not_hispanic$results$point, result_not_hispanic$results$CI_lower, result_not_hispanic$results$CI_upper),
+    irl(result_not_hispanic$results_specific$point[13],
+        result_not_hispanic$results_specific$CI_lower[13],
+        result_not_hispanic$results_specific$CI_upper[13])))
+    
+knitr::kable(xtable(tableA2), type = "html", 
+             col.names = c("Effect", 
+                           "All", 
+                           "Female", "Male", 
+                           "White", "Black", "Other Race", 
+                           "Hispanic", "Not Hispanic"))
+```
+
+## Table A3 Group-specific estimates for the decomposition {.tabset}
+
+This table is adapted from: https://github.com/ang-yu/causal_decomposition_case_study/blob/main/Analysis
+
+### All
+
+```{r table a3 all, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_all$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Female
+
+```{r table a3 fem, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_female$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Male
+
+```{r table a3 mal, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_male$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### White
+
+```{r table a3 whi, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_white$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Black
+
+```{r table a3 bla, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_black$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Other Race
+
+```{r table a3 oth, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_other$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Hispanic
+
+```{r table a3 his, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_hispanic$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+### Not Hispanic
+
+```{r table a3 nhi, eval=TRUE, results=TRUE, message=F, echo=FALSE, warning=FALSE, include = TRUE}
+result_not_hispanic$results_specific[3:12,c("point","CI_lower","CI_upper")] %>% 
+  as.data.frame() %>% 
+  mutate_if(is.numeric, ~round(., 3)) %>% 
+  transmute(res = paste0(point, " (", CI_lower, ", ", CI_upper, ")")) %>% 
+  rownames_to_column() %>% 
+  filter(grepl("ATE", rowname))
+```
+
+## Figure A1 Case numbers and relative share of parental and individual education by race
+
+```{r pct race, results=TRUE, include = TRUE}
+cognition_data_final_out_filtered %>% 
+  group_by(RARACEM, education_p, education) %>% 
+  summarise(n = n()) %>% 
+  group_by(RARACEM) %>% 
+  mutate(N = sum(n), 
+         pct = n/N*100, 
+         RARACEM = case_when(
+           RARACEM == "1.White/Caucasian" ~ "White",
+           RARACEM == "2.Black/African American" ~ "Black",
+           RARACEM == "3.Other" ~ "Other"),
+         Education = case_when(
+           education_p == "one_parent_above_8_yedu" & education == "college" ~ "Higher: Parent(s) & Self",
+           education_p == "one_parent_above_8_yedu" & education == "below_college" ~ "Higher: Parent(s) only",
+           education_p == "no_parent_above_8_yedu" & education == "college" ~ "Lower: Parent(s) only",
+           education_p == "no_parent_above_8_yedu" & education == "below_college" ~ "Lower: Parent(s) & Self",
+         )) %>% 
+  ggplot(aes(RARACEM, pct, fill = Education, label = paste0("n = ", n))) +
+  geom_bar(stat = "identity", lwd = .5, colour = "white", alpha = 1) + 
+  theme_minimal() +
+  scale_fill_manual(values = c("tomato3", "tomato2", "steelblue2", "steelblue4")) +
+  geom_label(position = position_stack(), vjust = 0, alpha = 1, colour = "white") +
+  ylab("Percent") + xlab("Self-Reported Race")
+```
+
+## Figure A2 Case numbers and relative share of parental and individual education by ethnicity
+
+```{r pct ethn, results=TRUE, include = TRUE}
+cognition_data_final_out_filtered %>% 
+  group_by(RAHISPAN, education_p, education) %>% 
+  summarise(n = n()) %>% 
+  group_by(RAHISPAN) %>% 
+  mutate(N = sum(n), 
+         pct = n/N*100, 
+         RAHISPAN = case_when(
+           RAHISPAN == "0.Not Hispanic" ~ "Non-Hispanic",
+           RAHISPAN == "1.Hispanic" ~ "Hispanic"),
+         Education = case_when(
+           education_p == "one_parent_above_8_yedu" & education == "college" ~ "Higher: Parent(s) & Self",
+           education_p == "one_parent_above_8_yedu" & education == "below_college" ~ "Higher: Parent(s) only",
+           education_p == "no_parent_above_8_yedu" & education == "college" ~ "Lower: Parent(s) only",
+           education_p == "no_parent_above_8_yedu" & education == "below_college" ~ "Lower: Parent(s) & Self",
+         )) %>% 
+  ggplot(aes(RAHISPAN, pct, fill = Education, label = paste0("n = ", n))) +
+  geom_bar(stat = "identity", lwd = .5, colour = "white", alpha = 1) + 
+  theme_minimal() +
+  scale_fill_manual(values = c("tomato3", "tomato2", "steelblue2", "steelblue4")) +
+  geom_label(position = position_stack(), vjust = 0, alpha = 1, colour = "white") +
+  ylab("Percent") + xlab("Self-Reported Ethnicity")
+```
